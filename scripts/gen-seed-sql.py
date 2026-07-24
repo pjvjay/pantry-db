@@ -45,13 +45,19 @@ def main() -> None:
         "-- ─── products ───",
     ]
     for p in products:
+        unit_qty = p.get("unit_qty")
         lines.append(
-            f"INSERT INTO products (id, name, description, price, category) VALUES "
+            f"INSERT INTO products (id, name, description, price, category, "
+            f"subcategory, dietary_tags, unit_size, unit_qty, unit_uom) VALUES "
             f"({p['id']}, {q(p['name'])}, {q(p.get('description', ''))}, "
-            f"{p['price']}, {q(p.get('category'))}) "
+            f"{p['price']}, {q(p.get('category'))}, {q(p.get('subcategory', ''))}, "
+            f"{q(p.get('dietary_tags', ''))}, {q(p.get('unit_size', ''))}, "
+            f"{'NULL' if unit_qty is None else unit_qty}, {q(p.get('unit_uom', ''))}) "
             f"ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, "
             f"description = EXCLUDED.description, price = EXCLUDED.price, "
-            f"category = EXCLUDED.category;"
+            f"category = EXCLUDED.category, subcategory = EXCLUDED.subcategory, "
+            f"dietary_tags = EXCLUDED.dietary_tags, unit_size = EXCLUDED.unit_size, "
+            f"unit_qty = EXCLUDED.unit_qty, unit_uom = EXCLUDED.unit_uom;"
         )
 
     lines += ["", "-- ─── recipes ───"]
