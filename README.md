@@ -13,11 +13,16 @@ repo's migration image applies them.
 ```
 .
 ├── migrations/            # numbered DDL, applied exactly once each
-│   └── 0001_init.sql
+│   ├── 0001_init.sql
+│   ├── 0002_product_attributes.sql   # NL2SQL: subcategory/tags/unit sizes
+│   └── 0003_stores_reviews_terms.sql # query-plan: stores, per-store prices,
+│                                     # reviews, brand, product_terms index
 ├── seeds/
 │   ├── products.json      # canonical seed data (edit these)
 │   ├── recipes.json
-│   └── seed.sql           # GENERATED — idempotent upserts, applied every run
+│   └── seed.sql           # GENERATED — idempotent, applied every run;
+│                          # stores/prices/reviews/terms are synthesized
+│                          # deterministically by gen-seed-sql.py
 ├── scripts/
 │   ├── gen-seed-sql.py    # regenerates seeds/seed.sql from the JSON
 │   └── run-migrations.sh  # container entrypoint
