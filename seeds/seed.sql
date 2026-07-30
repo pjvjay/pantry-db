@@ -74,6 +74,8 @@ INSERT INTO recipes (slug, name, servings) VALUES ('spaghetti_bolognese', 'Spagh
 INSERT INTO recipes (slug, name, servings) VALUES ('chicken_curry', 'Simple Chicken Curry', 4) ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, servings = EXCLUDED.servings;
 INSERT INTO recipes (slug, name, servings) VALUES ('grilled_cheese', 'Grilled Cheese Sandwich', 1) ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, servings = EXCLUDED.servings;
 INSERT INTO recipes (slug, name, servings) VALUES ('veggie_stirfry', 'Vegetable Stir Fry', 2) ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, servings = EXCLUDED.servings;
+INSERT INTO recipes (slug, name, servings) VALUES ('beef_rice_bowl', 'Beef & Broccoli Rice Bowl', 3) ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, servings = EXCLUDED.servings;
+INSERT INTO recipes (slug, name, servings) VALUES ('tomato_penne', 'Tomato Penne', 2) ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, servings = EXCLUDED.servings;
 
 -- ─── recipe_ingredients (delete + re-insert per recipe) ───
 DELETE FROM recipe_ingredients WHERE recipe_slug = 'pbj_sandwich';
@@ -108,6 +110,18 @@ INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('v
 INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('veggie_stirfry', 3, 'Garlic', 'produce');
 INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('veggie_stirfry', 4, 'Ginger', 'produce');
 INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('veggie_stirfry', 5, 'Canola Oil', 'oil');
+DELETE FROM recipe_ingredients WHERE recipe_slug = 'beef_rice_bowl';
+INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('beef_rice_bowl', 1, 'Ground Beef', 'meat');
+INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('beef_rice_bowl', 2, 'Basmati Rice', 'grain');
+INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('beef_rice_bowl', 3, 'Broccoli', 'produce');
+INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('beef_rice_bowl', 4, 'Garlic', 'produce');
+INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('beef_rice_bowl', 5, 'Canola Oil', 'oil');
+DELETE FROM recipe_ingredients WHERE recipe_slug = 'tomato_penne';
+INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('tomato_penne', 1, 'Penne', 'pantry');
+INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('tomato_penne', 2, 'Canned Tomatoes', 'pantry');
+INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('tomato_penne', 3, 'Garlic', 'produce');
+INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('tomato_penne', 4, 'Olive Oil', 'oil');
+INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('tomato_penne', 5, 'Mozzarella', 'dairy');
 
 -- ─── stores ───
 INSERT INTO stores (id, name, lat, lon, address) VALUES (1, 'Pantry Mart Downtown', 49.282, -123.118, '833 Granville St, Vancouver') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, lat = EXCLUDED.lat, lon = EXCLUDED.lon, address = EXCLUDED.address;
