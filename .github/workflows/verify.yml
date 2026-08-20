@@ -1,0 +1,60 @@
+# ============================================================
+# pantry-db — pull-request verification
+#
+# Migrations are applied once each, in filename order, and tracked in
+# schema_migrations. A migration that fails in the cluster fails inside an
+# ArgoCD PreSync hook, which is a bad place to discover a typo. This applies
+# the whole chain against a real Postgres on every PR, then applies the
+# seed twice to prove it is still idempotent.
+# ============================================================
+
+name: verify
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: pantry
+          POSTGRES_PASSWORD: pantry
+          POSTGRES_DB: pantry
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pantry"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGPASSWORD: pantry
+      PSQL_ARGS: -h 127.0.0.1 -p 5432 -U pantry -d pantry -v ON_ERROR_STOP=1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply every migration in order
+        run: |
+          for f in migrations/*.sql; do
+            echo "--- $f"
+            psql $PSQL_ARGS -q -f "$f"
+          done
+
+      - name: Apply seeds, twice (idempotency)
+        run: |
+          psql $PSQL_ARGS -q -f seeds/seed.sql
+          psql $PSQL_ARGS -q -f seeds/seed.sql
+
+      - name: seed.sql is not stale
+        run: |
+          python3 scripts/gen-seed-sql.py
+          git diff --exit-code -- seeds/seed.sql
