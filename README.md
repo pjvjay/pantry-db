@@ -15,8 +15,13 @@ repo's migration image applies them.
 ├── migrations/            # numbered DDL, applied exactly once each
 │   ├── 0001_init.sql
 │   ├── 0002_product_attributes.sql   # NL2SQL: subcategory/tags/unit sizes
-│   └── 0003_stores_reviews_terms.sql # query-plan: stores, per-store prices,
-│                                     # reviews, brand, product_terms index
+│   ├── 0003_stores_reviews_terms.sql # query-plan: stores, per-store prices,
+│   │                                 # reviews, brand, product_terms index
+│   ├── 0004_product_origins.sql      # one resolved origin per product
+│   ├── 0005_origin_evidence.sql      # evidence rows beneath the summary;
+│   │                                 # scraped price observations
+│   └── 0006_origin_submissions.sql   # reviewed queue for agent-submitted
+│                                     # label claims (pending → evidence)
 ├── seeds/
 │   ├── products.json      # canonical seed data (edit these)
 │   ├── recipes.json
