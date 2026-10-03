@@ -69,14 +69,25 @@ CI fails the build if `seed.sql` is stale relative to the JSON.
 
 Every word of a product's name and description becomes a `product_terms`
 row (lowercased, naive plural stem), and the planner matches an ingredient
-only when the product carries all of its words. So:
+only when the product carries all of its words. Two exceptions, applied
+identically by pantry-api: words a description negates ("no salt added",
+"no jelly", "without X") are not indexed, and a few irregular plurals stem
+to their singular ("leaves" -> leaf, "loaves" -> loaf, "halves" -> half).
+Otherwise the stem only drops a final "s" (or the "es" of "-oes"), so
+"chillies" is indexed as "chillie" and "chiles" as "chile". So:
 
 - Name and describe products the way recipes phrase them, alternate
-  spellings included ("chili, chile, chilli"; "scallions").
+  spellings included ("chili, chilli, chillies, chile, chiles";
+  "scallions"): a spelling the description lacks does not match.
 - Keep incidental words out of descriptions. A product joins the pool of
   every ingredient whose words it contains: "clarified butter" on ghee would
-  put ghee in every "butter" pool, and "no salt added" already puts Crushed
-  Tomatoes in the "salt" pool.
+  put ghee in every "butter" pool, and "packed in water" puts a can in the
+  pool of a recipe's water (pantry-api skips water and ice before matching,
+  but the rule stands for every other word).
+- File products by kind: the planner's substitutes for a thin pool are the
+  cheapest products of the same subcategory, so whole spices ("whole
+  spice"), ground spices and blends ("spice"), dried and fresh herbs, and
+  cooking and finishing oils each have their own.
 - Append new products with new ids and leave existing rows alone. Store
   prices and reviews are seeded from the id.
 - pantry-api keeps its own copy of `seeds/products.json` for its SQLite dev
