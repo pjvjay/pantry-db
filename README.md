@@ -67,6 +67,21 @@ git commit -am "add new products" && git push
 
 CI fails the build if `seed.sql` is stale relative to the JSON.
 
+Every word of a product's name and description becomes a `product_terms`
+row (lowercased, naive plural stem), and the planner matches an ingredient
+only when the product carries all of its words. So:
+
+- Name and describe products the way recipes phrase them, alternate
+  spellings included ("chili, chile, chilli"; "scallions").
+- Keep incidental words out of descriptions. A product joins the pool of
+  every ingredient whose words it contains: "clarified butter" on ghee would
+  put ghee in every "butter" pool, and "no salt added" already puts Crushed
+  Tomatoes in the "salt" pool.
+- Append new products with new ids and leave existing rows alone. Store
+  prices and reviews are seeded from the id.
+- pantry-api keeps its own copy of `seeds/products.json` for its SQLite dev
+  DB. Copy the file there as well, or local runs will not see the change.
+
 ## Testing locally
 
 ```bash
