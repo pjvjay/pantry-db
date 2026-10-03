@@ -16,8 +16,10 @@ idempotent SQL file that the migration runner applies on every run:
 KEEP-IN-SYNC: the store list, brand derivation, price variance, review
 generation, and the tokenizer below are duplicated in pantry-api
 (pantry_planner/storeseed.py + nlsearch/units.py) so its local SQLite dev
-DB matches this schema. pantry-api's test-suite parity test guards the
-tokenizer half; change either side → change both.
+DB matches this schema. The tokenizer's GOLDEN cases below are asserted on
+every run of this script and, verbatim, by pantry-api's test suite
+(tests/test_nlsearch.py), so the two copies cannot drift apart unnoticed;
+change either side → change both.
 
 Run after editing the JSON, commit both:
 
@@ -101,7 +103,18 @@ _STOPWORDS = {"fresh", "of", "the", "a", "an", "large", "small", "medium",
               "to", "taste", "optional", "some"}
 
 
+# Plurals the suffix rules get wrong ("Bay Leaves" vs a recipe's "bay
+# leaf"). Not a general -ves -> -f rule: olives, cloves, chives must survive.
+IRREGULAR_PLURALS = {"leaves": "leaf", "loaves": "loaf", "halves": "half"}
+
+# A word the description negates is not a match term: "no salt added" must
+# not put Crushed Tomatoes in the "salt" pool. "X-free" stays indexed.
+_NEGATED = re.compile(r"\b(?:no|without)[\s-]+[a-z]+(?:[\s-]+added)?\b", re.IGNORECASE)
+
+
 def _stem(token: str) -> str:
+    if token in IRREGULAR_PLURALS:
+        return IRREGULAR_PLURALS[token]
     if token.endswith("oes") and len(token) > 4:
         return token[:-2]
     if token.endswith("s") and not token.endswith("ss") and len(token) > 3:
@@ -114,9 +127,37 @@ def _tokens(name: str) -> list[str]:
     return [_stem(t) for t in raw if t not in _STOPWORDS and len(t) > 1]
 
 
+def _index_text(name: str, description: str | None) -> str:
+    return f"{name} {_NEGATED.sub(' ', description or '')}"
+
+
 def product_terms(product: dict) -> list[str]:
-    text = f"{product['name']} {product.get('description', '')}"
-    return sorted(set(_tokens(text)))
+    return sorted(set(_tokens(_index_text(product["name"], product.get("description", "")))))
+
+
+# (name, description) -> the product_terms they must produce. pantry-api's
+# tests/test_nlsearch.py holds the same table; both must pass it.
+GOLDEN_TERMS = [
+    (("Bay Leaves 10g", "Dried whole bay leaves, 10g bag"),
+     ["bag", "bay", "dried", "leaf", "whole"]),
+    (("Olives", "Cloves, chives, two loaves and halves"),
+     ["and", "chive", "clove", "half", "loaf", "olive", "two"]),
+    (("Roma Tomato", "Fresh Roma tomatoes, 500g pack"), ["pack", "roma", "tomato"]),
+    (("Crushed Tomatoes Canned 796ml", "Canned crushed tomatoes, no salt added, 796ml"),
+     ["canned", "crushed", "ml", "tomato"]),
+    (("Canadian Peanut Butter Cream", "Smooth peanut butter, no jelly, 500g"),
+     ["butter", "canadian", "cream", "peanut", "smooth"]),
+    (("Oat Milk 1L", "Unsweetened oat beverage, dairy-free, 1L carton"),
+     ["beverage", "carton", "dairy", "free", "milk", "oat", "unsweetened"]),
+    (("Jalapeno Peppers", "Fresh jalapeño peppers (jalapeños, jalapenos), ~200g"),
+     ["jalape", "jalapeno", "os", "pepper"]),
+]
+
+
+def _check_golden() -> None:
+    for (name, description), want in GOLDEN_TERMS:
+        got = product_terms({"name": name, "description": description})
+        assert got == want, f"tokenizer drifted: {name!r} -> {got}, expected {want}"
 
 
 # ─── SQL rendering ───
@@ -129,6 +170,7 @@ def q(value: str | None) -> str:
 
 
 def main() -> None:
+    _check_golden()
     products = json.loads((SEEDS / "products.json").read_text())
     recipes = json.loads((SEEDS / "recipes.json").read_text())
 
