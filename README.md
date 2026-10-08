@@ -100,6 +100,16 @@ Otherwise the stem only drops a final "s" (or the "es" of "-oes"), so
 - pantry-api keeps its own copy of `seeds/products.json` for its SQLite dev
   DB. Copy the file there as well, or local runs will not see the change.
 
+Products 166-169 are **synthetic demo products**, made up for the meal
+planner's demo starter recipes, which need items the catalog lacked: Frozen
+Mango Chunks 600g (166), Sliced Pepperoni 175g (167), Pizza Dough 500g (168)
+and Instant Yeast 3-Pack (169). Their names, sizes, descriptions and prices
+are invented and are not any retailer's listing. A product row has no field
+that says so, so pantry-api carries the label instead: its
+`seeds/demo_products.json` lists these four rows, and the meal plan marks
+them "(demo product)" wherever it shows them. Like every store price here,
+their prices are synthetic.
+
 Each ingredient object in `seeds/recipes.json` also carries an amount
 (`quantity`, `unit`, `note`), which becomes a `recipe_line_amounts` row
 (0007). These are **demo house amounts**: synthetic gram and millilitre
