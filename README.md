@@ -40,16 +40,26 @@ repo's migration image applies them.
 The image is executed as an **ArgoCD PreSync Job** (defined in
 [pantry-gitops](https://github.com/pjvjay/pantry-gitops)): on every sync,
 migrations run *before* the app workloads roll. Pending migrations apply
-once (tracked in a `schema_migrations` table); the seed file applies every
-run and is written to be idempotent.
+once (tracked in a `schema_migrations` table, whose `applied_by` column
+records the pantry-db release that applied each one; rows from before that
+column existed say NULL); the seed file applies every run and is written to
+be idempotent.
 
 ```
-git push here
-  → CI builds ghcr.io/pjvjay/pantry-db-migrate:dev-<sha>
-  → CI bumps the tag in pantry-gitops
+merge a labelled PR to main
+  → CI (build.yml) plans vX.Y.Z from the release labels
+  → builds ghcr.io/pjvjay/pantry-db-migrate:dev-<sha>, version baked in
+  → git tag vX.Y.Z → the same digest retagged X.Y.Z, X.Y, latest → GitHub Release
+  → CI sets X.Y.Z in pantry-gitops
   → ArgoCD PreSync Job migrates the CNPG Postgres cluster
   → app Deployments roll only after the Job succeeds
 ```
+
+Every PR carries one release label (`release:major`, `minor`, `patch` or
+`none`), checked by `labels.yml`; `.github/versioning.json` says which paths
+ship. A destructive migration is `release:major`. The process, the 0.x
+policy, rollback (`promote_version`) and the platform release train are in
+[RELEASING.md](https://github.com/pjvjay/pantry-platform/blob/main/RELEASING.md).
 
 ## Editing the schema
 
@@ -110,4 +120,9 @@ docker run --rm --network host \
 ```
 
 Re-run the last command — everything reports `skip`/idempotent. That's the
-same behavior the cluster Job relies on.
+same behavior the cluster Job relies on. Pass `--build-arg APP_VERSION=...`
+to see `applied_by` filled in; without it the runner records `unknown`.
+
+The runner also runs straight from a checkout, which is how CI tests it:
+`MIGRATIONS_DIR=migrations SEED_FILE=seeds/seed.sql sh scripts/run-migrations.sh`
+with the `DB_*` variables set (it needs `psql` and `pg_isready`).
