@@ -58,3 +58,33 @@ jobs:
         run: |
           python3 scripts/gen-seed-sql.py
           git diff --exit-code -- seeds/seed.sql
+
+      # The steps above apply the files with psql directly; this runs the
+      # image's entrypoint itself, twice, on a database of its own. The
+      # first run must record the release on every migration it applies,
+      # the second must apply nothing.
+      - name: The runner, twice (applied_by recorded, then a no-op)
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: "5432"
+          DB_NAME: runner
+          DB_USER: pantry
+          DB_PASSWORD: pantry
+          PANTRY_DB_VERSION: 9.9.9
+          MIGRATIONS_DIR: migrations
+          SEED_FILE: seeds/seed.sql
+        run: |
+          psql $PSQL_ARGS -c "CREATE DATABASE runner"
+          sh scripts/run-migrations.sh
+          sh scripts/run-migrations.sh > "$RUNNER_TEMP/second.log"
+          cat "$RUNNER_TEMP/second.log"
+          q() { psql -h 127.0.0.1 -U pantry -d runner -tAc "$1"; }
+          files=$(ls migrations/*.sql | wc -l)
+          rows=$(q "select count(*) from schema_migrations")
+          unrecorded=$(q "select count(*) from schema_migrations where applied_by is distinct from '9.9.9'")
+          echo "migrations=$files rows=$rows rows-without-9.9.9=$unrecorded"
+          test "$rows" -eq "$files" && test "$unrecorded" -eq 0 \
+            || { echo "::error::the runner did not record applied_by on every migration"; exit 1; }
+          if grep -q '^apply ' "$RUNNER_TEMP/second.log"; then
+            echo "::error::the second run applied a migration again"; exit 1
+          fi
