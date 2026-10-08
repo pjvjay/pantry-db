@@ -31,6 +31,8 @@ repo's migration image applies them.
 ├── seeds/
 │   ├── products.json      # canonical seed data (edit these)
 │   ├── recipes.json       # 7 recipes; each line has demo house amounts
+│   ├── nutrients.json     # reference foods, nutrients per 100 g, measures,
+│   │                      # ingredient -> reference food map (cited)
 │   └── seed.sql           # GENERATED — idempotent, applied every run;
 │                          # stores/prices/reviews/terms are synthesized
 │                          # deterministically by gen-seed-sql.py
@@ -132,6 +134,51 @@ that way wherever it shows them. So:
   inserts each recipe's amounts after re-inserting its lines.
 - pantry-api keeps a byte-identical copy of `seeds/recipes.json` too, read
   by the same rule (`db.seed_from_json`). Change both and `cmp` them.
+
+## Nutrition reference data
+
+`seeds/nutrients.json` becomes the five tables of 0008 and 0009. It holds 41
+reference foods with up to eight nutrients per 100 g (energy_kcal, protein_g,
+fat_g, satfat_g, carbohydrate_g, fibre_g, sugars_g, sodium_mg), 40 gram
+weights for volumes and counts, and a 46-key map from ingredient key to
+reference food. pantry-api computes nutrition per portion from these and the
+recipe amounts; nothing here is a product's label.
+
+- **Source.** Every value was read from Health Canada's Canadian Nutrient
+  File API (one request per food), on 2026-10-08. The API does not say which
+  edition it serves; Health Canada's CNF online search serves the 2015 CNF, so
+  these are most likely 2015 values, **not** the CNF 2026 files. The source
+  row's `edition` says so, and pantry-api shows it with every number. The CNF
+  2026 record on open.canada.ca carries the Open Government Licence – Canada;
+  the API documentation states no licence, so the file says that the
+  licence's coverage of the API data is not verified, and carries the OGL
+  attribution line.
+- **Unknown is never zero.** A nutrient the source did not publish for a food
+  is missing from `per_100g`, listed in `absent`, and gets no row. Three foods
+  have no total sugars (cardamom, all-purpose flour, spearmint). A 0 in the
+  file is a 0 the source published.
+- **The map is keyed by ingredient, not by product.** The key is
+  pantry-api's `units.tokens()` of the line's name joined by spaces ("chicken
+  thigh", "green chilie"). `match_kind` is `generic`, `close` (the note says
+  how the reference differs) or `none` (reviewed; nothing fits, so the
+  ingredient's nutrients stay unknown: "garam masala", "peanut butter and
+  jelly jam"). Water has a row: it is never bought, but its published values
+  are counted.
+- **No assumed density.** A millilitre or count line converts only through a
+  measure the source publishes for that food (`grams` for `verbatim`).
+- `gen-seed-sql.py` runs `_check_nutrition` before writing anything. It
+  refuses: a food whose `ref_id` is not `<source>:<food code>`, that has no
+  description or state note, or lacks energy or protein; a value that is
+  negative, infinite, or above 100 g per 100 g; an `absent` list that does not
+  match; a measure or map row pointing at an unknown food; `none` with a
+  reference food or anything else without one; and a library recipe line
+  whose ingredient key has no map row. It also cross-checks energy against
+  4 × protein + 9 × fat + 4 × carbohydrate (within 25 kcal or 20%). Four
+  high-fibre foods (cardamom, chili powder, oregano, dry yeast) fall outside
+  it as published; each carries an `atwater_note` with the arithmetic, and
+  its published value is kept.
+- pantry-api keeps a byte-identical copy of `seeds/nutrients.json` and loads it
+  the same way (`db.seed_from_json`). Change both and `cmp` them.
 
 ## Testing locally
 
