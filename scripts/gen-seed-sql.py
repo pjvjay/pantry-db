@@ -167,6 +167,10 @@ def _check_golden() -> None:
 # ─── recipe line amounts (KEEP-IN-SYNC: pantry-api db.seed_from_json) ───
 
 AMOUNT_KEYS = {"quantity", "unit", "note"}
+# pantry-api's bound on a reviewed line's quantity (models.MAX_LINE_QUANTITY). A
+# library line over it cannot be served as a RecipeDoc, so GET /recipes/{slug}/doc
+# would fail on that recipe instead of the seed failing here.
+MAX_QUANTITY = 1_000_000
 
 
 def line_amount(ing: dict | str) -> tuple[float | None, str, str] | None:
@@ -192,8 +196,8 @@ def _check_amounts(recipes: list[dict]) -> None:
             where = f"{r['slug']} line {i}"
             is_number = (isinstance(quantity, (int, float)) and not isinstance(quantity, bool)
                          and math.isfinite(quantity))
-            assert quantity is None or (is_number and quantity >= 0), \
-                f"{where}: quantity must be a number >= 0, got {quantity!r}"
+            assert quantity is None or (is_number and 0 <= quantity <= MAX_QUANTITY), \
+                f"{where}: quantity must be a number from 0 to {MAX_QUANTITY:,}, got {quantity!r}"
             assert quantity is not None or note, f"{where}: a null quantity needs a note"
 
 

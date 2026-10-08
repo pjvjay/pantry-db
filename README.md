@@ -112,7 +112,8 @@ that way wherever it shows them. So:
   and pantry-api shows it as "amount not recorded".
 - A null `quantity` means the amount is not stated, and the `note` must say
   why. `gen-seed-sql.py` refuses a null quantity without a note, and any
-  quantity that is not a number of 0 or more.
+  quantity that is not a number from 0 to 1,000,000 (pantry-api's bound on a
+  reviewed line, `models.MAX_LINE_QUANTITY`).
 - Amount rows hang off their recipe line (`ON DELETE CASCADE`), so seed.sql
   inserts each recipe's amounts after re-inserting its lines.
 - pantry-api keeps a byte-identical copy of `seeds/recipes.json` too, read
