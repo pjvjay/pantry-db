@@ -180,7 +180,7 @@ INSERT INTO recipes (slug, name, servings) VALUES ('veggie_stirfry', 'Vegetable 
 INSERT INTO recipes (slug, name, servings) VALUES ('beef_rice_bowl', 'Beef & Broccoli Rice Bowl', 3) ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, servings = EXCLUDED.servings;
 INSERT INTO recipes (slug, name, servings) VALUES ('tomato_penne', 'Tomato Penne', 2) ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, servings = EXCLUDED.servings;
 
--- ─── recipe_ingredients (delete + re-insert per recipe) ───
+-- ─── recipe_ingredients + recipe_line_amounts (delete + re-insert per recipe) ───
 DELETE FROM recipe_ingredients WHERE recipe_slug = 'pbj_sandwich';
 INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('pbj_sandwich', 1, 'Peanut Butter and Jelly Jam', 'spread');
 INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) VALUES ('pbj_sandwich', 2, 'Wheat Bread', 'bread');
