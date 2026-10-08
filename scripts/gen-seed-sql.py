@@ -244,8 +244,8 @@ def main() -> None:
             f"servings = EXCLUDED.servings;"
         )
 
-    lines += ["", "-- ─── recipe_ingredients + recipe_line_amounts "
-                  "(delete + re-insert per recipe) ───"]
+    lines += ["", ("-- ─── recipe_ingredients + recipe_line_amounts "
+                   "(delete + re-insert per recipe) ───")]
     n_amounts = 0
     for r in recipes:
         lines.append(f"DELETE FROM recipe_ingredients WHERE recipe_slug = {q(r['slug'])};")
