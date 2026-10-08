@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 import re
 from pathlib import Path
@@ -178,8 +179,10 @@ def line_amount(ing: dict | str) -> tuple[float | None, str, str] | None:
 
 
 def _check_amounts(recipes: list[dict]) -> None:
-    """The quantity is written into the SQL unquoted, so it must be a number.
-    A null quantity means "not stated", and the shopper is owed the reason."""
+    """The quantity is written into the SQL unquoted, so it must be a finite
+    number (json.loads accepts Infinity, which would be written as a bare
+    `inf`). A null quantity means "not stated", and the shopper is owed the
+    reason."""
     for r in recipes:
         for i, ing in enumerate(r["ingredients"], start=1):
             amount = line_amount(ing)
@@ -187,7 +190,8 @@ def _check_amounts(recipes: list[dict]) -> None:
                 continue
             quantity, _, note = amount
             where = f"{r['slug']} line {i}"
-            is_number = isinstance(quantity, (int, float)) and not isinstance(quantity, bool)
+            is_number = (isinstance(quantity, (int, float)) and not isinstance(quantity, bool)
+                         and math.isfinite(quantity))
             assert quantity is None or (is_number and quantity >= 0), \
                 f"{where}: quantity must be a number >= 0, got {quantity!r}"
             assert quantity is not None or note, f"{where}: a null quantity needs a note"
