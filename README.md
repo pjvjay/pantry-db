@@ -26,7 +26,7 @@ repo's migration image applies them.
 │                                     # (demo house amounts)
 ├── seeds/
 │   ├── products.json      # canonical seed data (edit these)
-│   ├── recipes.json
+│   ├── recipes.json       # 7 recipes; each line has demo house amounts
 │   └── seed.sql           # GENERATED — idempotent, applied every run;
 │                          # stores/prices/reviews/terms are synthesized
 │                          # deterministically by gen-seed-sql.py
@@ -99,6 +99,24 @@ Otherwise the stem only drops a final "s" (or the "es" of "-oes"), so
   prices and reviews are seeded from the id.
 - pantry-api keeps its own copy of `seeds/products.json` for its SQLite dev
   DB. Copy the file there as well, or local runs will not see the change.
+
+Each ingredient object in `seeds/recipes.json` also carries an amount
+(`quantity`, `unit`, `note`), which becomes a `recipe_line_amounts` row
+(0007). These are **demo house amounts**: synthetic gram and millilitre
+amounts written for this demo ("700 g Chicken Thighs" for a curry that
+serves 4), not taken from any cookbook or site, and pantry-api labels them
+that way wherever it shows them. So:
+
+- A line with any of the three keys gets an amount row, with a missing
+  `unit` or `note` written as `''`. A line with none of them has no row,
+  and pantry-api shows it as "amount not recorded".
+- A null `quantity` means the amount is not stated, and the `note` must say
+  why. `gen-seed-sql.py` refuses a null quantity without a note, and any
+  quantity that is not a number of 0 or more.
+- Amount rows hang off their recipe line (`ON DELETE CASCADE`), so seed.sql
+  inserts each recipe's amounts after re-inserting its lines.
+- pantry-api keeps a byte-identical copy of `seeds/recipes.json` too, read
+  by the same rule (`db.seed_from_json`). Change both and `cmp` them.
 
 ## Testing locally
 
