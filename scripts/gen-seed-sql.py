@@ -219,8 +219,10 @@ def nutrient_rows(data: dict) -> dict[str, list[tuple]]:
     """nutrients.json as the rows of the five tables, in file order. A food's
     source_food_id is its own field when the file has one (a CSV source with a
     FoodID), else its food_code (the CNF API names a food by its code only).
-    source_code is the source's nutrient id. A nutrient missing from per_100g
-    gets no row: unknown, never 0."""
+    source_code is the source's own nutrient id: a CSV's NutrientCode (or FDC
+    nutrient id) as cnf-subset.py records it, else the CNF API's
+    nutrient_name_id (208 for energy, 203 for protein, ...). A nutrient
+    missing from per_100g gets no row: unknown, never 0."""
     sources = [(s["source"], *(s.get(k) or "" for k in SOURCE_FIELDS)) for s in data["sources"]]
     foods, amounts = [], []
     for f in data["foods"]:
@@ -229,7 +231,8 @@ def nutrient_rows(data: dict) -> dict[str, list[tuple]]:
         codes = f.get("source_codes") or {}
         for n in NUTRIENTS:
             if n in f["per_100g"]:
-                code = (codes.get(n) or {}).get("nutrient_name_id")
+                c = codes.get(n) or {}
+                code = c.get("nutrient_code", c.get("nutrient_name_id"))
                 amounts.append((f["ref_id"], n, float(f["per_100g"][n]),
                                 "" if code is None else str(code)))
     measures = [(m["ref_id"], m["measure"], float(m["grams"]),

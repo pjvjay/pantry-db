@@ -38,7 +38,11 @@ repo's migration image applies them.
 │                          # deterministically by gen-seed-sql.py
 ├── scripts/
 │   ├── gen-seed-sql.py    # regenerates seeds/seed.sql from the JSON
+│   ├── cnf-subset.py      # rebuilds nutrients.json's values from a CNF
+│   │                      # download, if one is ever approved
 │   └── run-migrations.sh  # container entrypoint
+├── tests/                 # stdlib unittest: seed checks, cnf-subset.py on
+│                          # invented fixtures (python3 -m unittest discover -s tests)
 ├── Dockerfile             # postgres:17-alpine + psql runner
 └── .github/workflows/     # CI: build → GHCR → bump tag in pantry-gitops
 ```
@@ -179,6 +183,9 @@ recipe amounts; nothing here is a product's label.
   its published value is kept.
 - pantry-api keeps a byte-identical copy of `seeds/nutrients.json` and loads it
   the same way (`db.seed_from_json`). Change both and `cmp` them.
+- `scripts/cnf-subset.py` can rebuild the values from a CNF download if one is
+  ever approved (none has been). It reads the CSVs or the zip from a folder
+  outside the repo and never fetches anything; see its docstring.
 
 ## Testing locally
 

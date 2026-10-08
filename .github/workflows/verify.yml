@@ -58,3 +58,6 @@ jobs:
         run: |
           python3 scripts/gen-seed-sql.py
           git diff --exit-code -- seeds/seed.sql
+
+      - name: Seed checks and cnf-subset.py tests (stdlib, invented fixtures)
+        run: python3 -m unittest discover -s tests -v
