@@ -22,8 +22,12 @@ repo's migration image applies them.
 │   │                                 # scraped price observations
 │   ├── 0006_origin_submissions.sql   # reviewed queue for agent-submitted
 │   │                                 # label claims (pending → evidence)
-│   └── 0007_recipe_line_amounts.sql  # quantity/unit/note per recipe line
-│                                     # (demo house amounts)
+│   ├── 0007_recipe_line_amounts.sql  # quantity/unit/note per recipe line
+│   │                                 # (demo house amounts)
+│   ├── 0008_nutrition.sql            # reference foods, nutrients per 100 g,
+│   │                                 # ingredient -> reference food map
+│   └── 0009_nutrient_measures.sql    # the source's gram weights for a
+│                                     # volume or a count
 ├── seeds/
 │   ├── products.json      # canonical seed data (edit these)
 │   ├── recipes.json       # 7 recipes; each line has demo house amounts
