@@ -1,0 +1,12 @@
+{
+  "component": "pantry-db",
+  "image": "ghcr.io/pjvjay/pantry-db-migrate",
+  "baseline": "0.1.0",
+  "shipped_paths": [
+    "Dockerfile",
+    "migrations/**",
+    "seeds/**",
+    "scripts/**"
+  ],
+  "build_workflow": ".github/workflows/build.yml"
+}
