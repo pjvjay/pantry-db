@@ -20,8 +20,10 @@ repo's migration image applies them.
 │   ├── 0004_product_origins.sql      # one resolved origin per product
 │   ├── 0005_origin_evidence.sql      # evidence rows beneath the summary;
 │   │                                 # scraped price observations
-│   └── 0006_origin_submissions.sql   # reviewed queue for agent-submitted
-│                                     # label claims (pending → evidence)
+│   ├── 0006_origin_submissions.sql   # reviewed queue for agent-submitted
+│   │                                 # label claims (pending → evidence)
+│   └── 0007_recipe_line_amounts.sql  # quantity/unit/note per recipe line
+│                                     # (demo house amounts)
 ├── seeds/
 │   ├── products.json      # canonical seed data (edit these)
 │   ├── recipes.json
