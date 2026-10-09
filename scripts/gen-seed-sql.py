@@ -9,17 +9,20 @@ idempotent SQL file that the migration runner applies on every run:
   - recipe_ingredients: DELETE + re-INSERT per seeded recipe, inside the
     same transaction — handles removed/reordered ingredient lines, which
     a bare upsert would leave behind.
+  - recipe_line_amounts: INSERTed right after each recipe's lines. The
+    DELETE above cascades to them (0007's foreign key), so they can only
+    go in after the lines, never before.
   - store_products / reviews / product_terms: fully synthetic, derived
     deterministically from the product list (seeded PRNGs keyed on ids) —
     DELETE + re-INSERT wholesale on every run.
 
 KEEP-IN-SYNC: the store list, brand derivation, price variance, review
-generation, and the tokenizer below are duplicated in pantry-api
-(pantry_planner/storeseed.py + nlsearch/units.py) so its local SQLite dev
-DB matches this schema. The tokenizer's GOLDEN cases below are asserted on
-every run of this script and, verbatim, by pantry-api's test suite
-(tests/test_nlsearch.py), so the two copies cannot drift apart unnoticed;
-change either side → change both.
+generation, the tokenizer, and which recipe lines get an amount row are
+duplicated in pantry-api (pantry_planner/storeseed.py + nlsearch/units.py
++ db.seed_from_json) so its local SQLite dev DB matches this schema. The
+tokenizer's GOLDEN cases below are asserted on every run of this script
+and, verbatim, by pantry-api's test suite (tests/test_nlsearch.py), so the
+two copies cannot drift apart unnoticed; change either side → change both.
 
 Run after editing the JSON, commit both:
 
@@ -29,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 import re
 from pathlib import Path
@@ -160,6 +164,43 @@ def _check_golden() -> None:
         assert got == want, f"tokenizer drifted: {name!r} -> {got}, expected {want}"
 
 
+# ─── recipe line amounts (KEEP-IN-SYNC: pantry-api db.seed_from_json) ───
+
+AMOUNT_KEYS = {"quantity", "unit", "note"}
+# pantry-api's bound on a reviewed line's quantity (models.MAX_LINE_QUANTITY). A
+# library line over it cannot be served as a RecipeDoc, so GET /recipes/{slug}/doc
+# would fail on that recipe instead of the seed failing here.
+MAX_QUANTITY = 1_000_000
+
+
+def line_amount(ing: dict | str) -> tuple[float | None, str, str] | None:
+    """(quantity, unit, note) for a recipe line, or None when the line states
+    no amount at all. A line with any of the three keys gets a row, so a
+    line that says only why its amount is unknown is still recorded."""
+    if not isinstance(ing, dict) or not AMOUNT_KEYS & ing.keys():
+        return None
+    return ing.get("quantity"), ing.get("unit") or "", ing.get("note") or ""
+
+
+def _check_amounts(recipes: list[dict]) -> None:
+    """The quantity is written into the SQL unquoted, so it must be a finite
+    number (json.loads accepts Infinity, which would be written as a bare
+    `inf`). A null quantity means "not stated", and the shopper is owed the
+    reason."""
+    for r in recipes:
+        for i, ing in enumerate(r["ingredients"], start=1):
+            amount = line_amount(ing)
+            if amount is None:
+                continue
+            quantity, _, note = amount
+            where = f"{r['slug']} line {i}"
+            is_number = (isinstance(quantity, (int, float)) and not isinstance(quantity, bool)
+                         and math.isfinite(quantity))
+            assert quantity is None or (is_number and 0 <= quantity <= MAX_QUANTITY), \
+                f"{where}: quantity must be a number from 0 to {MAX_QUANTITY:,}, got {quantity!r}"
+            assert quantity is not None or note, f"{where}: a null quantity needs a note"
+
+
 # ─── SQL rendering ───
 
 def q(value: str | None) -> str:
@@ -173,6 +214,7 @@ def main() -> None:
     _check_golden()
     products = json.loads((SEEDS / "products.json").read_text())
     recipes = json.loads((SEEDS / "recipes.json").read_text())
+    _check_amounts(recipes)
 
     lines: list[str] = [
         "-- GENERATED FILE — do not edit by hand.",
@@ -210,7 +252,9 @@ def main() -> None:
             f"servings = EXCLUDED.servings;"
         )
 
-    lines += ["", "-- ─── recipe_ingredients (delete + re-insert per recipe) ───"]
+    lines += ["", ("-- ─── recipe_ingredients + recipe_line_amounts "
+                   "(delete + re-insert per recipe) ───")]
+    n_amounts = 0
     for r in recipes:
         lines.append(f"DELETE FROM recipe_ingredients WHERE recipe_slug = {q(r['slug'])};")
         for i, ing in enumerate(r["ingredients"], start=1):
@@ -219,6 +263,19 @@ def main() -> None:
             lines.append(
                 f"INSERT INTO recipe_ingredients (recipe_slug, line_no, name, category) "
                 f"VALUES ({q(r['slug'])}, {i}, {q(name)}, {q(category)});"
+            )
+        # After all of this recipe's lines: the DELETE above has just cascaded
+        # its old amounts away, and each amount row needs its line to exist.
+        for i, ing in enumerate(r["ingredients"], start=1):
+            amount = line_amount(ing)
+            if amount is None:
+                continue
+            quantity, unit, note = amount
+            n_amounts += 1
+            lines.append(
+                f"INSERT INTO recipe_line_amounts "
+                f"(recipe_slug, line_no, quantity, unit, note) VALUES ({q(r['slug'])}, {i}, "
+                f"{'NULL' if quantity is None else quantity}, {q(unit)}, {q(note)});"
             )
 
     lines += ["", "-- ─── stores ───"]
@@ -266,7 +323,7 @@ def main() -> None:
     lines += ["", "COMMIT;", ""]
     OUT.write_text("\n".join(lines))
     print(f"Wrote {OUT.relative_to(ROOT)}: {len(products)} products, "
-          f"{len(recipes)} recipes, {len(STORES)} stores, "
+          f"{len(recipes)} recipes, {n_amounts} recipe_line_amounts, {len(STORES)} stores, "
           f"{len(STORES) * len(products)} store_products, "
           f"{n_reviews} reviews, {n_terms} product_terms")
 
