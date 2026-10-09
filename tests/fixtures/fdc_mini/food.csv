@@ -1,0 +1,4 @@
+"fdc_id","data_type","description","food_category_id","publication_date"
+"2001","sr_legacy_food","Test food A, all three energies","1","2019-04-01"
+"2002","sr_legacy_food","Test food B, specific and plain energy","1","2019-04-01"
+"2003","sr_legacy_food","Test food C, plain energy only","1","2019-04-01"

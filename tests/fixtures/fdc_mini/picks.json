@@ -1,0 +1,35 @@
+{
+  "about": "Picks for tests/fixtures/fdc_mini. Every value in the fixture is invented.",
+  "source": {
+    "source": "fdc-test",
+    "name": "FoodData Central SR Legacy (test fixture)",
+    "publisher": "nobody: invented values",
+    "edition": "fixture",
+    "licence": "",
+    "licence_url": "",
+    "attribution": "Invented test values.",
+    "url": "",
+    "retrieved_at": "2026-10-08"
+  },
+  "foods": [
+    {
+      "food_id": "2001",
+      "state_note": "test"
+    },
+    {
+      "food_id": "2002",
+      "state_note": "test"
+    },
+    {
+      "food_id": "2003",
+      "state_note": "test"
+    }
+  ],
+  "map": [
+    {
+      "ingredient_key": "a",
+      "food": "2001",
+      "match_kind": "generic"
+    }
+  ]
+}

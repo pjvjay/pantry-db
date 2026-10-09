@@ -15,10 +15,14 @@ idempotent SQL file that the migration runner applies on every run:
   - store_products / reviews / product_terms: fully synthetic, derived
     deterministically from the product list (seeded PRNGs keyed on ids) —
     DELETE + re-INSERT wholesale on every run.
+  - nutrient_sources / nutrient_foods / nutrient_amounts / nutrient_measures /
+    ingredient_nutrient_map (0008, 0009): from seeds/nutrients.json, DELETE
+    (children first) + re-INSERT wholesale. _check_nutrition refuses the file
+    first if a value, a reference or a library line's ingredient key is wrong.
 
 KEEP-IN-SYNC: the store list, brand derivation, price variance, review
-generation, the tokenizer, and which recipe lines get an amount row are
-duplicated in pantry-api (pantry_planner/storeseed.py + nlsearch/units.py
+generation, the tokenizer, which recipe lines get an amount row, and how
+nutrients.json becomes rows (nutrient_rows) are duplicated in pantry-api (pantry_planner/storeseed.py + nlsearch/units.py
 + db.seed_from_json) so its local SQLite dev DB matches this schema. The
 tokenizer's GOLDEN cases below are asserted on every run of this script
 and, verbatim, by pantry-api's test suite (tests/test_nlsearch.py), so the
@@ -201,6 +205,118 @@ def _check_amounts(recipes: list[dict]) -> None:
             assert quantity is not None or note, f"{where}: a null quantity needs a note"
 
 
+# ─── nutrition (KEEP-IN-SYNC: pantry-api db.seed_from_json) ───
+
+# The eight nutrients, per 100 g, with the unit each is stored in.
+NUTRIENTS = {"energy_kcal": "kcal", "protein_g": "g", "fat_g": "g", "satfat_g": "g",
+             "carbohydrate_g": "g", "fibre_g": "g", "sugars_g": "g", "sodium_mg": "mg"}
+MATCH_KINDS = {"generic", "close", "none"}
+SOURCE_FIELDS = ("name", "publisher", "edition", "licence", "licence_url", "attribution",
+                 "url", "retrieved_at")
+
+
+def nutrient_rows(data: dict) -> dict[str, list[tuple]]:
+    """nutrients.json as the rows of the five tables, in file order. A food's
+    source_food_id is its own field when the file has one (a CSV source with a
+    FoodID), else its food_code (the CNF API names a food by its code only).
+    source_code is the source's own nutrient id: a CSV's NutrientCode (or FDC
+    nutrient id) as cnf-subset.py records it, else the CNF API's
+    nutrient_name_id (208 for energy, 203 for protein, ...). A nutrient
+    missing from per_100g gets no row: unknown, never 0."""
+    sources = [(s["source"], *(s.get(k) or "" for k in SOURCE_FIELDS)) for s in data["sources"]]
+    foods, amounts = [], []
+    for f in data["foods"]:
+        foods.append((f["ref_id"], f["source"], str(f.get("source_food_id", f["food_code"])),
+                      str(f.get("food_code", "")), f["description"], f.get("state_note") or ""))
+        codes = f.get("source_codes") or {}
+        for n in NUTRIENTS:
+            if n in f["per_100g"]:
+                c = codes.get(n) or {}
+                code = c.get("nutrient_code", c.get("nutrient_name_id"))
+                amounts.append((f["ref_id"], n, float(f["per_100g"][n]),
+                                "" if code is None else str(code)))
+    measures = [(m["ref_id"], m["measure"], float(m["grams"]),
+                 None if m.get("volume_ml") is None else float(m["volume_ml"]),
+                 m["verbatim"], m.get("source_ref") or "") for m in data.get("measures", [])]
+    mapping = [(m["ingredient_key"], m.get("ref_id"), m["match_kind"], m.get("note") or "",
+                m.get("reviewed_at") or "") for m in data["map"]]
+    return {"sources": sources, "foods": foods, "amounts": amounts, "measures": measures,
+            "map": mapping}
+
+
+def _finite(x) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+
+
+def _check_nutrition(data: dict, recipes: list[dict]) -> None:
+    """Refuse a nutrients.json that would put a wrong or unsupported number in
+    front of a shopper. Every number must be the source's, so this checks the
+    file's own consistency, not the values against a guess:
+
+      - each food cites a listed source, its ref_id is '<source>:<id>', it has
+        a verbatim description and a state note, energy and protein are
+        published, and `absent` names exactly the nutrients it lacks;
+      - no value is negative or infinite, and no gram nutrient is above 100 g
+        per 100 g;
+      - energy agrees with 4 x protein + 9 x fat + 4 x carbohydrate within
+        max(25 kcal, 20%), or the food carries an atwater_note saying why not;
+      - every measure and map row points at a listed food; 'none' and only
+        'none' has no reference food;
+      - every library recipe line's ingredient key has a map row, so a
+        tokenizer change cannot silently re-key an ingredient."""
+    source_ids = [s["source"] for s in data["sources"]]
+    assert len(source_ids) == len(set(source_ids)), "duplicate nutrient source"
+    for s in data["sources"]:
+        assert s.get("name") and s.get("attribution"), f"source {s['source']}: name and attribution"
+    foods: dict[str, dict] = {}
+    for f in data["foods"]:
+        rid = f["ref_id"]
+        assert rid not in foods, f"duplicate food {rid}"
+        foods[rid] = f
+        assert f["source"] in source_ids, f"{rid}: unknown source {f['source']!r}"
+        sid = str(f.get("source_food_id", f["food_code"]))
+        assert rid == f"{f['source']}:{sid}", f"{rid}: ref_id is not '<source>:{sid}'"
+        assert f.get("description", "").strip(), f"{rid}: no description"
+        assert f.get("state_note", "").strip(), f"{rid}: no state_note"
+        per = f["per_100g"]
+        assert set(per) <= set(NUTRIENTS), f"{rid}: unknown nutrients {set(per) - set(NUTRIENTS)}"
+        assert "energy_kcal" in per and "protein_g" in per, f"{rid}: energy and protein needed"
+        assert set(f.get("absent", [])) == set(NUTRIENTS) - set(per), \
+            f"{rid}: `absent` must name exactly the nutrients missing from per_100g"
+        for n, v in per.items():
+            assert _finite(v) and v >= 0, f"{rid} {n}: {v!r} is not a number >= 0"
+            assert NUTRIENTS[n] != "g" or v <= 100, f"{rid} {n}: {v} g per 100 g"
+        if {"fat_g", "carbohydrate_g"} <= per.keys():
+            energy = per["energy_kcal"]
+            atwater = 4 * per["protein_g"] + 9 * per["fat_g"] + 4 * per["carbohydrate_g"]
+            assert abs(energy - atwater) <= max(25, 0.2 * energy) or f.get("atwater_note"), \
+                f"{rid}: energy {energy} kcal vs Atwater {atwater:.1f} kcal and no atwater_note"
+    seen_measures = set()
+    for m in data.get("measures", []):
+        key = (m["ref_id"], m["measure"])
+        assert key not in seen_measures, f"duplicate measure {key}"
+        seen_measures.add(key)
+        assert m["ref_id"] in foods, f"measure {key}: unknown food"
+        assert _finite(m["grams"]) and m["grams"] > 0, f"measure {key}: grams must be > 0"
+        vol = m.get("volume_ml")
+        assert vol is None or (_finite(vol) and vol > 0), f"measure {key}: volume_ml must be > 0"
+        assert m.get("verbatim", "").strip(), f"measure {key}: no verbatim name"
+    keys = set()
+    for m in data["map"]:
+        k = m["ingredient_key"]
+        assert k not in keys, f"duplicate map key {k!r}"
+        keys.add(k)
+        assert m["match_kind"] in MATCH_KINDS, f"map {k!r}: match_kind {m['match_kind']!r}"
+        assert (m["match_kind"] == "none") == (m.get("ref_id") is None), \
+            f"map {k!r}: only match_kind 'none' has no ref_id"
+        assert m.get("ref_id") is None or m["ref_id"] in foods, f"map {k!r}: unknown ref_id"
+    for r in recipes:
+        for i, ing in enumerate(r["ingredients"], start=1):
+            name = ing["name"] if isinstance(ing, dict) else ing
+            key = " ".join(_tokens(name))
+            assert key in keys, f"{r['slug']} line {i}: ingredient key {key!r} has no map row"
+
+
 # ─── SQL rendering ───
 
 def q(value: str | None) -> str:
@@ -210,11 +326,22 @@ def q(value: str | None) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+def num(value: float | None) -> str:
+    """A finite float as SQL (repr is exact and stable), or NULL."""
+    if value is None:
+        return "NULL"
+    assert math.isfinite(value), f"not a finite number: {value!r}"
+    return repr(float(value))
+
+
 def main() -> None:
     _check_golden()
     products = json.loads((SEEDS / "products.json").read_text())
     recipes = json.loads((SEEDS / "recipes.json").read_text())
+    nutrients = json.loads((SEEDS / "nutrients.json").read_text(encoding="utf-8"))
     _check_amounts(recipes)
+    _check_nutrition(nutrients, recipes)
+    rows = nutrient_rows(nutrients)
 
     lines: list[str] = [
         "-- GENERATED FILE — do not edit by hand.",
@@ -320,12 +447,43 @@ def main() -> None:
                 f"({q(term)}, {p['id']});"
             )
 
+    # Children first: amounts, measures and the map all point at a food, and a
+    # food at its source.
+    lines += ["", "-- ─── nutrition (0008, 0009; delete + re-insert) ───",
+              "DELETE FROM ingredient_nutrient_map;", "DELETE FROM nutrient_measures;",
+              "DELETE FROM nutrient_amounts;", "DELETE FROM nutrient_foods;",
+              "DELETE FROM nutrient_sources;"]
+    for row in rows["sources"]:
+        lines.append(
+            "INSERT INTO nutrient_sources (source, name, publisher, edition, licence, "
+            "licence_url, attribution, url, retrieved_at) VALUES ("
+            + ", ".join(q(v) for v in row) + ");")
+    for row in rows["foods"]:
+        lines.append(
+            "INSERT INTO nutrient_foods (ref_id, source, source_food_id, food_code, "
+            "description, state_note) VALUES (" + ", ".join(q(v) for v in row) + ");")
+    for ref_id, nutrient, per_100g, code in rows["amounts"]:
+        lines.append(
+            f"INSERT INTO nutrient_amounts (ref_id, nutrient, per_100g, source_code) VALUES "
+            f"({q(ref_id)}, {q(nutrient)}, {num(per_100g)}, {q(code)});")
+    for ref_id, measure, grams, volume_ml, verbatim, source_ref in rows["measures"]:
+        lines.append(
+            f"INSERT INTO nutrient_measures (ref_id, measure, grams, volume_ml, verbatim, "
+            f"source_ref) VALUES ({q(ref_id)}, {q(measure)}, {num(grams)}, {num(volume_ml)}, "
+            f"{q(verbatim)}, {q(source_ref)});")
+    for row in rows["map"]:
+        lines.append(
+            "INSERT INTO ingredient_nutrient_map (ingredient_key, ref_id, match_kind, note, "
+            "reviewed_at) VALUES (" + ", ".join(q(v) for v in row) + ");")
+
     lines += ["", "COMMIT;", ""]
     OUT.write_text("\n".join(lines))
     print(f"Wrote {OUT.relative_to(ROOT)}: {len(products)} products, "
           f"{len(recipes)} recipes, {n_amounts} recipe_line_amounts, {len(STORES)} stores, "
           f"{len(STORES) * len(products)} store_products, "
-          f"{n_reviews} reviews, {n_terms} product_terms")
+          f"{n_reviews} reviews, {n_terms} product_terms, "
+          f"{len(rows['foods'])} nutrient_foods, {len(rows['amounts'])} nutrient_amounts, "
+          f"{len(rows['measures'])} nutrient_measures, {len(rows['map'])} ingredient_nutrient_map")
 
 
 if __name__ == "__main__":
