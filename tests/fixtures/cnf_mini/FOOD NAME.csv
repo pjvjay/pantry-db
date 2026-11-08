@@ -1,0 +1,6 @@
+FoodID,FoodCode,FoodGroupID,FoodSourceID,FoodDescription,FoodDescriptionF,FoodDateOfEntry,FoodDateOfPublication,CountryCode,ScientificName
+1001,501,4,1,"Test oil, vegetable","Huile d'essai, végétale",2026-01-01,2026-01-01,,
+1002,502,20,1,"Test grain, white, dry","Grain d'essai, blanc, sec",2026-01-01,2026-01-01,,
+1003,503,2,1,"Test spice, ground","Épice d'essai, moulue",2026-01-01,2026-01-01,,
+1004,504,1,1,"Test egg, whole, raw","Œuf d'essai, entier, cru",2026-01-01,2026-01-01,,
+1005,505,11,1,"Test tomato purée, canned","Purée de tomates d'essai, en conserve",2026-01-01,2026-01-01,,
